@@ -156,7 +156,7 @@ if __name__ == "__main__":
     model = torch.nn.DataParallel(model)
 
     decay_params = [p.name for n, p in model.named_parameters() if not any(nd in n for nd in ["bias", "norm"])]
-    optimizer = torch.optim.AdamW(learning_rate=args.lr,
+    optimizer = torch.optim.AdamW(lr=args.lr,
                                   parameters=model.parameters(),
                                   weight_decay=args.weight_decay,
                                   apply_decay_param_fun=lambda x: x in decay_params)
