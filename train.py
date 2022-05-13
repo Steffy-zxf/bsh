@@ -154,12 +154,7 @@ if __name__ == "__main__":
     # model = BiLSTM(len(vocab), len(label_dict), padding_idx=vocab["[PAD]"])
     model = model.to(device)
     model = torch.nn.DataParallel(model)
-
-    decay_params = [p.name for n, p in model.named_parameters() if not any(nd in n for nd in ["bias", "norm"])]
-    optimizer = torch.optim.AdamW(lr=args.lr,
-                                  parameters=model.parameters(),
-                                  weight_decay=args.weight_decay,
-                                  apply_decay_param_fun=lambda x: x in decay_params)
+    optimizer = torch.optim.AdamW(lr=args.lr, params=model.parameters(), weight_decay=args.weight_decay)
     total_steps = args.epoch * len(train_loader)
     warmup_steps = total_steps * args.warmup_prop
     scheduler = get_linear_schedule_with_warmup(
