@@ -155,7 +155,7 @@ if __name__ == "__main__":
     model = model.to(device)
     model = torch.nn.DataParallel(model)
     optimizer = torch.optim.AdamW(lr=args.lr, params=model.parameters(), weight_decay=args.weight_decay)
-    total_steps = args.epoch * len(train_loader)
+    total_steps = args.epochs * len(train_loader)
     warmup_steps = total_steps * args.warmup_prop
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
@@ -168,8 +168,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    num_epoch = 200
-    for i in range(num_epoch):
+    for i in range(args.epochs):
         epoch_start_time = time.time()
         train(device, train_loader, model, optimizer, scheduler, criterion, epoch=i)
         if local_rank == 0:
