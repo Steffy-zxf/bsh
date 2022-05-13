@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     # model = BiLSTM(len(vocab), len(label_dict), padding_idx=vocab["[PAD]"])
     model = model.to(device)
-    model = torch.torchnn.DataParallel(model)
+    model = torch.nn.DataParallel(model)
 
     decay_params = [p.name for n, p in model.named_parameters() if not any(nd in n for nd in ["bias", "norm"])]
     optimizer = torch.optim.AdamW(learning_rate=args.lr,

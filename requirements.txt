@@ -3,3 +3,4 @@ sklearn
 jieba
 pandas
 pyyaml
+transformers
