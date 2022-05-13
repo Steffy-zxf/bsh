@@ -25,7 +25,7 @@ class BiLSTM(nn.Module):
 
     def forward(self, text, text_lengths):
         embedded = self.embedder(text)
-        packed_embedded = pack_padded_sequence(embedded, text_lengths, batch_first=True, enforce_sorted=False)
+        packed_embedded = pack_padded_sequence(embedded, text_lengths.to("cpu"), batch_first=True, enforce_sorted=False)
         output, (h_n, c_n) = self.lstm(packed_embedded)
         output_unpacked, output_lengths = pad_packed_sequence(output, batch_first=True)
         out = output_unpacked[:, -1, :]
