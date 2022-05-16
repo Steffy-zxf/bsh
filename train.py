@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
-        train(device, train_loader, model, optimizer, scheduler, criterion, epoch=i)
+        train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label)
         if local_rank == 0:
             accu_val = evaluate(device, dev_loader, model)
             print("-" * 59)
