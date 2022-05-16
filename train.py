@@ -147,8 +147,8 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
     trans_fn = partial(collate_batch, tokenizer=tokenizer, label_dict=label_dict)
-    # train_sampler = DistributedSampler(train_ds, shuffle=True)
-    train_loader = DataLoader(train_ds, shuffle=True, batch_size=32, collate_fn=trans_fn)
+    train_sampler = DistributedSampler(train_ds, shuffle=True)
+    train_loader = DataLoader(train_ds, shuffle=True, sampler=train_sampler, batch_size=32, collate_fn=trans_fn)
     dev_loader = DataLoader(dev_ds, batch_size=32, shuffle=True, collate_fn=trans_fn)
 
     # model = BiLSTM(len(vocab), len(label_dict), padding_idx=vocab["[PAD]"])
