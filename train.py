@@ -25,14 +25,14 @@ from utils import write_vocab
 
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
-parser.add_argument("--epochs", type=int, default=200, help="Number of epoches for training.")
+parser.add_argument("--epochs", type=int, default=30, help="Number of epoches for training.")
 parser.add_argument("--weight_decay", default=0.01, type=float, help="Weight decay if we apply some.")
 parser.add_argument("--warmup_prop", default=0.1, type=float, help="Linear warmup proption over the training process.")
 parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="Select which device to train model, defaults to gpu.")
 parser.add_argument("--local_rank", type=int, default=0)
 parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate used to train.")
 parser.add_argument("--data_dir", type=str, default='data/', help="Directory to data.")
-parser.add_argument("--save_dir", type=str, default='checkpoints/', help="Directory to save model checkpoint")
+parser.add_argument("--save_dir", type=str, default='checkpoints2/', help="Directory to save model checkpoint")
 parser.add_argument("--batch_size", type=int, default=32, help="Total examples' number of a batch for training.")
 parser.add_argument("--init_from_ckpt", type=str, default=None, help="The path of checkpoint to be loaded.")
 parser.add_argument('--seed', type=int, default=1000, help='random seed (default: 1000)')
@@ -80,9 +80,9 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         optimizer.zero_grad()
         logits = model(input_ids, attention_mask, token_type_ids)["logits"]
         preds = torch.argmax(logits, dim=-1)
-        preds = preds.numpy().tolist()
+        preds = preds.cpu().numpy().tolist()
         preds = [inv_label[index] for index in preds]
-        true_labels = [inv_label[index] for index in labels.numpy().tolist()]
+        true_labels = [inv_label[index] for index in labels.cpu().numpy().tolist()]
         all_preds.extend(preds)
         all_labels.extend(true_labels)
 
@@ -96,7 +96,7 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         if idx % log_interval == 0 and idx > 0:
             print("| epoch {:3d} | {:5d}/{:5d} batches "
                   "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / total_count))
-            t = classification_report(all_labels, all_preds, target_names=label_names)
+            t = classification_report(all_labels, all_preds)
             print(t)
             total_acc, total_count = 0, 0
             all_preds, all_labels = [], []
