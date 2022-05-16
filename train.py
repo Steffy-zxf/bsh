@@ -102,13 +102,10 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
             all_preds, all_labels = [], []
 
 
-def evaluate(
-    device,
-    dataloader,
-    model,
-):
+def evaluate(device, dataloader, model, inv_label):
     model.eval()
     total_acc, total_count = 0, 0
+    all_preds, all_labels = [], []
 
     with torch.no_grad():
         for idx, (input_ids, token_type_ids, attention_mask, labels) in enumerate(dataloader):
@@ -119,9 +116,16 @@ def evaluate(
             optimizer.zero_grad()
 
             logits = model(input_ids, attention_mask, token_type_ids)["logits"]
-            probs = torch.softmax(logits, dim=-1)
-            total_acc += (probs.argmax(1) == labels).sum().item()
+            preds = torch.argmax(logits, dim=-1)
+            preds = preds.numpy().tolist()
+            preds = [inv_label[index] for index in preds]
+            true_labels = [inv_label[index] for index in labels.numpy().tolist()]
+            all_preds.extend(preds)
+            all_labels.extend(true_labels)
+            total_acc += (logits.argmax(1) == labels).sum().item()
             total_count += labels.size(0)
+        t = classification_report(all_labels, all_preds)
+        print(t)
     return total_acc / total_count
 
 
