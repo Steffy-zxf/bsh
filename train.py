@@ -12,6 +12,7 @@ from sklearn.metrics import classification_report
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 from transformers import BertForSequenceClassification
 from transformers import BertModel
 from transformers import BertTokenizer
@@ -32,7 +33,7 @@ parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="S
 parser.add_argument("--local_rank", type=int, default=0)
 parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate used to train.")
 parser.add_argument("--data_dir", type=str, default='data/', help="Directory to data.")
-parser.add_argument("--save_dir", type=str, default='checkpoints/', help="Directory to save model checkpoint")
+parser.add_argument("--save_dir", type=str, default='checkpoints/', help="Directory to save model checkpoint and logger.")
 parser.add_argument("--batch_size", type=int, default=32, help="Total examples' number of a batch for training.")
 parser.add_argument("--init_from_ckpt", type=str, default=None, help="The path of checkpoint to be loaded.")
 parser.add_argument('--seed', type=int, default=1000, help='random seed (default: 1000)')
@@ -65,14 +66,17 @@ def collate_batch(batch, tokenizer, label_dict):
     # return texts, seq_lens, labels
 
 
-def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label):
+def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, writer):
     model.train()
     all_preds, all_labels = [], []
     total_acc, total_count = 0, 0
+    total_loss = 0
     log_interval = 10
     label_names = list(inv_label.values())
 
+    global_step = epoch * len(dataloader)
     for idx, (input_ids, token_type_ids, attention_mask, labels) in enumerate(dataloader):
+        global_step += 1
         input_ids = input_ids.to(device)
         token_type_ids = token_type_ids.to(device)
         attention_mask = attention_mask.to(device)
@@ -87,6 +91,7 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         all_labels.extend(true_labels)
 
         loss = criterion(logits, labels)
+        total_loss += loss.item()
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -96,8 +101,11 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         if idx % log_interval == 0 and idx > 0:
             print("| epoch {:3d} | {:5d}/{:5d} batches "
                   "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / total_count))
+            writer.add_scalar("loss", total_loss / total_count, global_step)
+            writer.add_scalar("train_acc", total_acc / total_count, global_step)
             t = classification_report(all_labels, all_preds)
             print(t)
+
             total_acc, total_count = 0, 0
             all_preds, all_labels = [], []
 
@@ -187,20 +195,25 @@ if __name__ == "__main__":
     scheduler = get_linear_schedule_with_warmup(optimizer,
                                                 num_warmup_steps=warmup_steps,
                                                 num_training_steps=total_steps)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(reduction="mean")
+    log_dir = os.path.join(args.save_dir, "log")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    writer = SummaryWriter(args.log_dir)
 
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
-        train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label)
+        train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label, writer)
         if local_rank == 0:
-            accu_val = evaluate(device, dev_loader, model)
+            accu_val = evaluate(device, dev_loader, model, inv_label, writer)
             print("-" * 59)
             print("| end of epoch {:3d} | time: {:5.2f}s | "
                   "valid accuracy {:8.3f} ".format(i,
                                                    time.time() - epoch_start_time, accu_val))
+            writer.add_scalar("test_acc", accu_val, (i + 1) * len(train_loader))
             print("-" * 59)
             path = os.path.join(args.save_dir, "epoch_" + str(i) + ".pth")
             torch.save(model.state_dict(), path)
