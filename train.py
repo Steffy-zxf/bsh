@@ -125,9 +125,9 @@ def evaluate(device, dataloader, model, inv_label):
 
             logits = model(input_ids, attention_mask, token_type_ids)["logits"]
             preds = torch.argmax(logits, dim=-1)
-            preds = preds.numpy().tolist()
+            preds = preds.cpu().numpy().tolist()
             preds = [inv_label[index] for index in preds]
-            true_labels = [inv_label[index] for index in labels.numpy().tolist()]
+            true_labels = [inv_label[index] for index in labels.cpu().numpy().tolist()]
             all_preds.extend(preds)
             all_labels.extend(true_labels)
             total_acc += (logits.argmax(1) == labels).sum().item()
@@ -199,16 +199,16 @@ if __name__ == "__main__":
     log_dir = os.path.join(args.save_dir, "log")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    writer = SummaryWriter(args.log_dir)
+    writer = SummaryWriter(log_dir)
 
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
+    # if not os.path.exists(args.save_dir):
+    #     os.makedirs(args.save_dir)
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
         train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label, writer)
         if local_rank == 0:
-            accu_val = evaluate(device, dev_loader, model, inv_label, writer)
+            accu_val = evaluate(device, dev_loader, model, inv_label)
             print("-" * 59)
             print("| end of epoch {:3d} | time: {:5.2f}s | "
                   "valid accuracy {:8.3f} ".format(i,
