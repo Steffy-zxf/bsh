@@ -199,10 +199,10 @@ if __name__ == "__main__":
     log_dir = os.path.join(args.save_dir, "log")
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    writer = SummaryWriter(args.log_dir)
+    writer = SummaryWriter(log_dir)
 
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
+    # if not os.path.exists(args.save_dir):
+    #     os.makedirs(args.save_dir)
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
