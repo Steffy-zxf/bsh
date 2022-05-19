@@ -54,7 +54,9 @@ if __name__ == "__main__":
     trans_fn = partial(collate_batch, tokenizer=tokenizer, is_test=True)
     data_loader = DataLoader(pred_ds, batch_size=args.batch_size, collate_fn=trans_fn)
 
-    model = torch.load(args.init_from_ckpt)
+    model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    state_dict = torch.load(args.init_from_ckpt)
+    model.load_state_dict(state_dict)
     model = model.to(device)
     labels, confs = predict(model, device, data_loader, inv_label)
 
