@@ -15,7 +15,7 @@ from utils import collate_batch
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
 parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="Select which device to train model, defaults to gpu.")
-parser.add_argument("--data_path", type=str, default='data/unlabeld_data.csv', help="Directory to data.")
+parser.add_argument("--data_path", type=str, default='data/unlabeled_data.csv', help="Directory to data.")
 parser.add_argument("--save_dir", type=str, default='data/', help="Directory to save model checkpoint and logger.")
 parser.add_argument("--batch_size", type=int, default=32, help="Total examples' number of a batch for predicting.")
 parser.add_argument("--init_from_ckpt", type=str, default="./ckpt_epoch50_LR5e-5/epoch_49.pth", help="The path of model to be loaded.")
