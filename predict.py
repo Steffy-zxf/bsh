@@ -35,7 +35,7 @@ def predict(model, device, dataloader, inv_label_dict):
             attention_mask = attention_mask.to(device)
             logits = model(input_ids, attention_mask, token_type_ids)["logits"]
             probs = torch.softmax(logits, dim=-1)
-            max_probs = torch.max(probs, dim=-1)
+            max_probs = torch.max(probs, dim=-1, out="Tensor")[0]
             probs = probs.cpu().numpy().tolist()
             max_probs = max_probs.cpu().numpy().tolist()
             preds = torch.argmax(logits, dim=-1)
@@ -69,4 +69,4 @@ if __name__ == "__main__":
     save_path = os.path.join(args.save_dir, "predictions.csv")
     pred_ds.data["confidence"] = confs
     pred_ds.data["label"] = labels
-    pred_ds.data.to_csv(args.save_path, index=False, encoding="utf8")
+    pred_ds.data.to_csv(save_path, index=False, encoding="utf8")
