@@ -5,6 +5,7 @@ from functools import partial
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification
 from transformers import BertTokenizer
@@ -32,9 +33,9 @@ def predict(model, device, dataloader, inv_label_dict):
         token_type_ids = token_type_ids.to(device)
         attention_mask = attention_mask.to(device)
         logits = model(input_ids, attention_mask, token_type_ids)
-        probs = torch.softmax(logits, dim=-1)
-        max_probs = torch.max(probs)
-        preds = torch.argmax(logits, dim=-1)
+        probs = F.softmax(logits, dim=-1)
+        max_probs = F.max(probs)
+        preds = F.argmax(logits, dim=-1)
         results.append(inv_label_dict[preds.item()])
         confs.append(max_probs.item())
 
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     data_loader = DataLoader(pred_ds, batch_size=args.batch_size, collate_fn=trans_fn)
 
     model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    model = nn.DataParallel(model)
     state_dict = torch.load(args.init_from_ckpt)
     model.load_state_dict(state_dict)
     model = model.to(device)
