@@ -44,7 +44,7 @@ def predict(model, device, dataloader, inv_label_dict):
 if __name__ == "__main__":
     device = torch.device(args.device)
 
-    tags_file = os.path.join(args.data_dir, "tags.txt")
+    tags_file = os.path.join(args.save_dir, "tags.txt")
     with open(tags_file, "r", encoding="utf8") as f:
         label_dict = json.load(f)
         inv_label = {value: key for key, value in label_dict.items()}
@@ -54,7 +54,8 @@ if __name__ == "__main__":
     trans_fn = partial(collate_batch, tokenizer=tokenizer, is_test=True)
     data_loader = DataLoader(pred_ds, batch_size=args.batch_size, collate_fn=trans_fn)
 
-    model = BertForSequenceClassification.from_pretrained(args.init_from_ckpt, num_labels=len(label_dict))
+    model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    model.load_state_dict(torch.load(args.init_from_ckpt))
     model = model.to(device)
     labels, confs = predict(model, device, data_loader, inv_label)
 
