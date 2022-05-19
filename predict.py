@@ -32,7 +32,7 @@ def predict(model, device, dataloader, inv_label_dict):
         input_ids = input_ids.to(device)
         token_type_ids = token_type_ids.to(device)
         attention_mask = attention_mask.to(device)
-        logits = model(input_ids, attention_mask, token_type_ids)
+        logits = model(input_ids, attention_mask, token_type_ids)["logits"]
         probs = F.softmax(logits, dim=-1)
         max_probs = F.max(probs)
         preds = F.argmax(logits, dim=-1)
