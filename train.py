@@ -165,4 +165,4 @@ if __name__ == "__main__":
             writer.add_scalar("test_acc", accu_val, (i + 1) * len(train_loader))
             print("-" * 59)
             path = os.path.join(args.save_dir, "epoch_" + str(i) + ".pth")
-            torch.save(model.state_dict(), path)
+            torch.save(model.module.state_dict(), path)
