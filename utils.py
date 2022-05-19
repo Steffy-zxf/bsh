@@ -2,6 +2,7 @@ import json
 from collections import defaultdict
 
 import jieba
+import torch
 
 
 def read_stopword(path):
@@ -80,3 +81,15 @@ def preprocess_data(data, vocab, label_dict):
         labels.append(row['label'])
 
     return text_as, text_bs, labels
+
+
+def collate_batch(batch, tokenizer, label_dict=None, is_test=False):
+    text_a = [item[0] for item in batch]
+    text_b = [item[1] for item in batch]
+    encoded_inputs = tokenizer(text=text_a, text_pair=text_b, padding=True, return_tensors="pt")
+    if not is_test and isinstance(label_dict, dict):
+        labels = torch.tensor([label_dict[item[2]] for item in batch])
+        labels = torch.tensor(labels)
+        return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"], labels
+    else:
+        return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"]

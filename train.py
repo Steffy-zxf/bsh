@@ -18,6 +18,7 @@ from transformers import BertTokenizer
 from transformers import get_linear_schedule_with_warmup
 
 from data import MyDataSet
+from utils import collate_batch
 
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
@@ -34,16 +35,6 @@ parser.add_argument("--init_from_ckpt", type=str, default=None, help="The path o
 parser.add_argument('--seed', type=int, default=1000, help='random seed (default: 1000)')
 args = parser.parse_args()
 # yapf: enable
-
-
-def collate_batch(batch, tokenizer, label_dict):
-    text_a = [item[0] for item in batch]
-    text_b = [item[1] for item in batch]
-    labels = torch.tensor([label_dict[item[2]] for item in batch])
-
-    encoded_inputs = tokenizer(text=text_a, text_pair=text_b, padding=True, return_tensors="pt")
-    labels = torch.tensor(labels)
-    return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"], labels
 
 
 def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, writer):
@@ -100,8 +91,6 @@ def evaluate(device, dataloader, model, inv_label):
             token_type_ids = token_type_ids.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
-            optimizer.zero_grad()
-
             logits = model(input_ids, attention_mask, token_type_ids)["logits"]
             preds = torch.argmax(logits, dim=-1)
             preds = preds.cpu().numpy().tolist()
