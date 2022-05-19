@@ -33,11 +33,11 @@ def predict(model, device, dataloader, inv_label_dict):
         token_type_ids = token_type_ids.to(device)
         attention_mask = attention_mask.to(device)
         logits = model(input_ids, attention_mask, token_type_ids)["logits"]
-        probs = F.softmax(logits, dim=-1)
-        max_probs = F.max(probs)
-        preds = F.argmax(logits, dim=-1)
-        results.append(inv_label_dict[preds.item()])
-        confs.append(max_probs.item())
+        probs = torch.softmax(logits, dim=-1).cpu().numpy().tolist()
+        max_probs = torch.max(probs).cpu().numpy().tolist()
+        preds = torch.argmax(logits, dim=-1).cpu().numpy().tolist()
+        results.extend([inv_label_dict[item] for item in preds])
+        confs.extend(max_probs)
 
     return results, confs
 
