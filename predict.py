@@ -28,16 +28,20 @@ def predict(model, device, dataloader, inv_label_dict):
     model.eval()
     results = []
     confs = []
-    for idx, (input_ids, token_type_ids, attention_mask) in enumerate(dataloader):
-        input_ids = input_ids.to(device)
-        token_type_ids = token_type_ids.to(device)
-        attention_mask = attention_mask.to(device)
-        logits = model(input_ids, attention_mask, token_type_ids)["logits"]
-        probs = torch.softmax(logits, dim=-1).cpu().numpy().tolist()
-        max_probs = torch.max(probs).cpu().numpy().tolist()
-        preds = torch.argmax(logits, dim=-1).cpu().numpy().tolist()
-        results.extend([inv_label_dict[item] for item in preds])
-        confs.extend(max_probs)
+    with torch.no_grad():
+        for idx, (input_ids, token_type_ids, attention_mask) in enumerate(dataloader):
+            input_ids = input_ids.to(device)
+            token_type_ids = token_type_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            logits = model(input_ids, attention_mask, token_type_ids)["logits"]
+            probs = torch.softmax(logits, dim=-1)
+            probs = probs.cpu().numpy().tolist()
+            max_probs = torch.max(probs)
+            max_probs = max_probs.cpu().numpy().tolist()
+            preds = torch.argmax(logits, dim=-1)
+            preds = preds.cpu().numpy().tolist()
+            results.extend([inv_label_dict[item] for item in preds])
+            confs.extend(max_probs)
 
     return results, confs
 
