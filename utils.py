@@ -92,4 +92,5 @@ def collate_batch(batch, tokenizer, label_dict=None, is_test=False):
         labels = torch.tensor(labels)
         return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"], labels
     else:
-        return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"]
+        doc_ids = [item[2] for item in batch]
+        return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"], doc_ids

@@ -65,11 +65,17 @@ def build_vocab(texts, stopwords=set(), num_words=None, min_freq=5, unk_token="[
 
 def clean_data(file_path):
     data = pd.read_excel(file_path, sheet_name="data")
-    cleaned_text_a, cleaned_text_b = [], []
-    labeled_a, labeled_b, labels = [], [], []
+    c_dids, cleaned_text_a, cleaned_text_b = [], [], []
+    c_raw_text_a, c_raw_text_b = [], []
+    l_dids, labeled_a, labeled_b, labels = [], [], [], []
+    l_raw_text_a, l_raw_text_b = [], []
+    c_parts, l_parts = [], []
+    l_tags = []
+
     for idx, row in data.iterrows():
         text_a = row['Defect Found']
         text_b = row['Work Executed']
+        doc_id = row["Document Number"]
         if not (isinstance(text_a, str) and isinstance(text_b, str)):
             continue
         cleaned_a = re.sub(r"sj[0-9A-Za-z]*[-/]*\d*|SJ[0-9A-Za-z]*[-/]*\d*|//\d*-|\d*-\d*-", "", text_a)
@@ -84,11 +90,37 @@ def clean_data(file_path):
             labeled_a.append(cleaned_a)
             labeled_b.append(cleaned_b)
             labels.append(label)
+            l_dids.append(doc_id)
+            l_raw_text_a.append(text_a)
+            l_raw_text_b.append(text_b)
+            l_parts.append(part)
+            l_tags.append(tag)
         else:
             cleaned_text_a.append(cleaned_a)
             cleaned_text_b.append(cleaned_b)
+            c_dids.append(doc_id)
+            c_raw_text_a.append(text_a)
+            c_raw_text_b.append(text_b)
+            c_parts.append(part)
 
-    return cleaned_text_a, cleaned_text_b, labeled_a, labeled_b, labels
+    cleaned_data = pd.DataFrame({
+        "Document Number": c_dids,
+        'Defect Found': c_raw_text_a,
+        "Work Executed": c_raw_text_b,
+        'QM Part Structure Text': c_parts,
+        'text_a': cleaned_text_a,
+        'text_b': cleaned_text_b
+    })
+    labeled_data = pd.DataFrame({
+        "Document Number": l_dids,
+        'Defect Found': l_raw_text_a,
+        "Work Executed": l_raw_text_b,
+        'QM Part Structure Text': l_parts,
+        "FSB-Text": l_tags,
+        'text_a': labeled_a,
+        'text_b': labeled_b
+    })
+    return cleaned_data, labeled_data
 
 
 def check_and_clean_data(file_path):
@@ -175,17 +207,15 @@ if __name__ == "__main__":
     file_path = os.path.join(data_dir, "data_20220519.xlsx")
 
     # cleaned_text_a, cleaned_text_b, labels, all_data, tag_set = check_and_clean_data(file_path)
-    cleaned_text_a, cleaned_text_b, labeled_a, labeled_b, labels = clean_data(file_path)
-    data = pd.DataFrame({"text_a": cleaned_text_a, "text_b": cleaned_text_b})
+    cleaned_data, labeled_data = clean_data(file_path)
     pred_file = os.path.join(data_dir, "unlabeled_data.csv")
-    data.to_csv(pred_file, index=False, encoding="utf8")
-    print(data.head())
-    print(data.shape)
-    data = pd.DataFrame({"text_a": labeled_a, "text_b": labeled_b, "label": labels})
+    cleaned_data.to_csv(pred_file, index=False, encoding="utf8")
+    print(cleaned_data.head())
+    print(cleaned_data.shape)
     pred_file = os.path.join(data_dir, "labeled_data.csv")
-    data.to_csv(pred_file, index=False, encoding="utf8")
-    print(data.head())
-    print(data.shape)
+    labeled_data.to_csv(pred_file, index=False, encoding="utf8")
+    print(labeled_data.head())
+    print(labeled_data.shape)
 
     # write_to_file(data_dir, cleaned_text_a, cleaned_text_b, labels, tag_set)
     # split_to_train_and_test(all_data, data_dir)

@@ -28,8 +28,9 @@ def predict(model, device, dataloader, inv_label_dict):
     model.eval()
     results = []
     confs = []
+    dids = []
     with torch.no_grad():
-        for idx, (input_ids, token_type_ids, attention_mask) in enumerate(dataloader):
+        for idx, (input_ids, token_type_ids, attention_mask, doc_ids) in enumerate(dataloader):
             input_ids = input_ids.to(device)
             token_type_ids = token_type_ids.to(device)
             attention_mask = attention_mask.to(device)
@@ -42,8 +43,9 @@ def predict(model, device, dataloader, inv_label_dict):
             preds = preds.cpu().numpy().tolist()
             results.extend([inv_label_dict[item] for item in preds])
             confs.extend(max_probs)
+            dids.extend(doc_ids)
 
-    return results, confs
+    return results, confs, dids
 
 
 if __name__ == "__main__":
@@ -57,16 +59,19 @@ if __name__ == "__main__":
     pred_ds = MyDataSet(args.data_path, is_test=True)
     tokenizer = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
     trans_fn = partial(collate_batch, tokenizer=tokenizer, is_test=True)
-    data_loader = DataLoader(pred_ds, batch_size=args.batch_size, collate_fn=trans_fn)
+    data_loader = DataLoader(pred_ds, shuffle=False, batch_size=args.batch_size, collate_fn=trans_fn)
 
     model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
     state_dict = torch.load(args.init_from_ckpt)
     model.load_state_dict(state_dict)
     model = model.to(device)
-    labels, confs = predict(model, device, data_loader, inv_label)
+    labels, confs, dids = predict(model, device, data_loader, inv_label)
+    print(dids)
 
     save_path = os.path.join(args.save_dir, "predictions.csv")
     pred_ds.data["confidence"] = confs
     pred_ds.data["label"] = labels
+    print(pred_ds.data["Document Number"])
+
     pred_ds.data.to_csv(save_path, index=False, encoding="utf8")
