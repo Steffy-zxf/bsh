@@ -11,7 +11,7 @@ class MyDataSet(Dataset):
 
     def __getitem__(self, idx):
         if self.is_test:
-            return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc["Document Number"]
+            return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc[idx]["Document Number"]
         else:
             return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc[idx]["label"]
 
