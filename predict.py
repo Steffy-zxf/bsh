@@ -72,6 +72,7 @@ if __name__ == "__main__":
     save_path = os.path.join(args.save_dir, "predictions.csv")
     pred_ds.data["confidence"] = confs
     pred_ds.data["label"] = labels
+    data = pred_ds.data.drop(labels=["text_a", "text_b"])
     print(pred_ds.data["Document Number"])
 
     pred_ds.data.to_csv(save_path, index=False, encoding="utf8")

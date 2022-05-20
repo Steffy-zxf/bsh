@@ -117,8 +117,8 @@ def clean_data(file_path):
         "Work Executed": l_raw_text_b,
         'QM Part Structure Text': l_parts,
         "FSB-Text": l_tags,
-        'text_a': labeled_a,
-        'text_b': labeled_b
+        # 'text_a': labeled_a,
+        # 'text_b': labeled_b
     })
     return cleaned_data, labeled_data
 
