@@ -84,11 +84,13 @@ def preprocess_data(data, vocab, label_dict):
 
 
 def collate_batch(batch, tokenizer, label_dict=None, is_test=False):
-    text_a = [item[0] for item in batch]
-    text_b = [item[1] for item in batch]
+    text_a, text_b = [], []
+    for a, b, part in batch:
+        text_a.append(part + " " + b)
+        text_b.append(part + " " + a)
     encoded_inputs = tokenizer(text=text_a, text_pair=text_b, padding=True, return_tensors="pt")
     if not is_test and isinstance(label_dict, dict):
-        labels = torch.tensor([label_dict[item[2]] for item in batch])
+        labels = torch.tensor([label_dict[item[3]] for item in batch])
         labels = torch.tensor(labels)
         return encoded_inputs["input_ids"], encoded_inputs["token_type_ids"], encoded_inputs["attention_mask"], labels
     else:
