@@ -64,7 +64,7 @@ def build_vocab(texts, stopwords=set(), num_words=None, min_freq=5, unk_token="[
 
 
 def clean_data(file_path):
-    data = pd.read_excel(file_path, sheet_name="data")
+    data = pd.read_excel(file_path, sheet_name="Training Data")
     c_dids, cleaned_text_a, cleaned_text_b = [], [], []
     c_raw_text_a, c_raw_text_b = [], []
     l_dids, labeled_a, labeled_b, labels = [], [], [], []
@@ -124,8 +124,8 @@ def clean_data(file_path):
 
 
 def check_and_clean_data(file_path):
-    data = pd.read_excel(file_path, sheet_name="数据")
-    tags = pd.read_excel(file_path, sheet_name="分类")
+    data = pd.read_excel(file_path, sheet_name="Training Data")
+    tags = pd.read_excel(file_path, sheet_name="label")
     tags1 = set()
     for idx, row in tags.iterrows():
         if not isinstance(row['QM Parts'], str) or not isinstance(row["Defect"], str):
@@ -136,7 +136,7 @@ def check_and_clean_data(file_path):
         tags1.add(label)
 
     tags2 = set()
-    cleaned_text_a, cleaned_text_b, labels = [], [], []
+    cleaned_text_a, cleaned_text_b, labels, parts = [], [], [], []
     all_data = []
     for idx, row in data.iterrows():
         part = row['QM Part Structure Text']
@@ -156,16 +156,16 @@ def check_and_clean_data(file_path):
         cleaned_b = re.sub(r"</br>|br|\sbr\s|\s</br>\s", "。", text_b)
         cleaned_text_a.append(cleaned_a)
         cleaned_text_b.append(cleaned_b)
-        all_data.append((cleaned_a, cleaned_b, label))
+        all_data.append((cleaned_a, cleaned_b, part, label))
         labels.append(label)
+        parts.append(part)
 
     assert tags1 == tags2, "The data tag set is inconsistent! Please check the data."
+    return cleaned_text_a, cleaned_text_b, labels, parts, all_data, tags2
 
-    return cleaned_text_a, cleaned_text_b, labels, all_data, tags2
 
-
-def write_to_file(save_dir, cleaned_text_a, cleaned_text_b, labels, tag_set):
-    d = {"text_a": cleaned_text_a, "text_b": cleaned_text_b, "label": labels}
+def write_to_file(save_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set):
+    d = {"text_a": cleaned_text_a, "text_b": cleaned_text_b, "part": parts, "label": labels}
     df = pd.DataFrame(data=d)
     path = os.path.join(save_dir, "cleaned_data.csv")
     df.to_csv(path, index=False, encoding="utf8")
@@ -179,46 +179,34 @@ def write_to_file(save_dir, cleaned_text_a, cleaned_text_b, labels, tag_set):
 
 
 def split_to_train_and_test(all_data, save_dir):
+
+    def write_data(data, file_path):
+        text_a, text_b, label, parts = [], [], [], []
+        for a, b, p, l in data:
+            text_a.append(a)
+            text_b.append(b)
+            parts.append(p)
+            label.append(l)
+        data_set = pd.DataFrame({"text_a": text_a, "text_b": text_b, "part": parts, "label": label})
+        data_set.to_csv(file_path, index=False, encoding="utf8")
+
     random.shuffle(all_data)
     num_train_data = int(len(all_data) * 0.8)
     train_data = all_data[:num_train_data]
     test_data = all_data[num_train_data:]
     train_file = os.path.join(save_dir, "train.csv")
-    text_a, text_b, label = [], [], []
-    for a, b, l in train_data:
-        text_a.append(a)
-        text_b.append(b)
-        label.append(l)
-    train_set = pd.DataFrame({"text_a": text_a, "text_b": text_b, "label": label})
-    train_set.to_csv(train_file, index=False, encoding="utf8")
-
-    text_a, text_b, label = [], [], []
-    for a, b, l in test_data:
-        text_a.append(a)
-        text_b.append(b)
-        label.append(l)
+    write_data(train_data, train_file)
     test_file = os.path.join(save_dir, "test.csv")
-    test_set = pd.DataFrame({"text_a": text_a, "text_b": text_b, "label": label})
-    test_set.to_csv(test_file, index=False, encoding="utf8")
+    write_data(test_data, test_file)
 
 
 if __name__ == "__main__":
     data_dir = "./data"
-    file_path = os.path.join(data_dir, "data_20220519.xlsx")
+    file_path = os.path.join(data_dir, "DC数据-0711.xlsx")
 
-    # cleaned_text_a, cleaned_text_b, labels, all_data, tag_set = check_and_clean_data(file_path)
-    cleaned_data, labeled_data = clean_data(file_path)
-    pred_file = os.path.join(data_dir, "unlabeled_data.csv")
-    cleaned_data.to_csv(pred_file, index=False, encoding="utf8")
-    print(cleaned_data.head())
-    print(cleaned_data.shape)
-    pred_file = os.path.join(data_dir, "labeled_data.csv")
-    labeled_data.to_csv(pred_file, index=False, encoding="utf8")
-    print(labeled_data.head())
-    print(labeled_data.shape)
-
-    # write_to_file(data_dir, cleaned_text_a, cleaned_text_b, labels, tag_set)
-    # split_to_train_and_test(all_data, data_dir)
+    cleaned_text_a, cleaned_text_b, labels, parts, all_data, tag_set = check_and_clean_data(file_path)
+    write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
+    split_to_train_and_test(all_data, data_dir)
 
     # cleaned_text_a.extend(cleaned_text_b)
     # stopwords_file = os.path.join(data_dir, "stopwords.txt")

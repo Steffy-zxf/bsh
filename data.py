@@ -13,7 +13,8 @@ class MyDataSet(Dataset):
         if self.is_test:
             return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc[idx]["Document Number"]
         else:
-            return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc[idx]["label"]
+            return self.data.loc[idx]["text_a"], self.data.loc[idx]["text_b"], self.data.loc[idx][
+                "part"], self.data.loc[idx]["label"]
 
     def __len__(self):
         return self.data.shape[0]

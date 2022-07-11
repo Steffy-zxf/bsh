@@ -1,9 +1,12 @@
 import argparse
 import json
+import logging
 import os
+import random
 import time
 from functools import partial
 
+import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -22,7 +25,7 @@ from utils import collate_batch
 
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
-parser.add_argument("--epochs", type=int, default=50, help="Number of epoches for training.")
+parser.add_argument("--epochs", type=int, default=20, help="Number of epoches for training.")
 parser.add_argument("--weight_decay", default=0.01, type=float, help="Weight decay if we apply some.")
 parser.add_argument("--warmup_prop", default=0.1, type=float, help="Linear warmup proption over the training process.")
 parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="Select which device to train model, defaults to gpu.")
@@ -37,7 +40,7 @@ args = parser.parse_args()
 # yapf: enable
 
 
-def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, writer):
+def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, local_rank, writer=None):
     model.train()
     all_preds, all_labels = [], []
     total_acc, total_count = 0, 0
@@ -68,11 +71,11 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
 
         total_acc += (logits.argmax(1) == labels).sum().item()
         total_count += labels.size(0)
-        if idx % log_interval == 0 and idx > 0:
+        if idx % log_interval == 0 and idx > 0 and local_rank == 0:
             print("| epoch {:3d} | {:5d}/{:5d} batches "
-                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / total_count))
-            writer.add_scalar("loss", total_loss / total_count, global_step)
-            writer.add_scalar("train_acc", total_acc / total_count, global_step)
+                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / (idx + 1)))
+            writer.add_scalar("loss", total_loss / (idx + 1), global_step)
+            writer.add_scalar("train_acc", total_acc / (idx + 1), global_step)
             t = classification_report(all_labels, all_preds)
             print(t)
 
@@ -105,11 +108,19 @@ def evaluate(device, dataloader, model, inv_label):
     return total_acc / total_count
 
 
+def set_seed(seed=1000):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 if __name__ == "__main__":
-    torch.manual_seed(args.seed)
-    local_rank = os.environ['LOCAL_RANK']
+    local_rank = args.local_rank
+    device = torch.device(args.device, local_rank)
     dist.init_process_group(backend="nccl")
-    device = torch.device(args.device)
+
+    set_seed(args.seed)
 
     tags_file = os.path.join(args.data_dir, "tags.txt")
     with open(tags_file, "r", encoding="utf8") as f:
@@ -118,19 +129,21 @@ if __name__ == "__main__":
 
     train_file = os.path.join(args.data_dir, "train.csv")
     train_ds = MyDataSet(train_file)
-    dev_file = os.path.join(args.data_dir, "dev.csv")
+    dev_file = os.path.join(args.data_dir, "test.csv")
     dev_ds = MyDataSet(dev_file)
 
     model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    model = model.to(device)
     tokenizer = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
     trans_fn = partial(collate_batch, tokenizer=tokenizer, label_dict=label_dict)
     train_sampler = DistributedSampler(train_ds, shuffle=True)
-    train_loader = DataLoader(train_ds, sampler=train_sampler, batch_size=32, collate_fn=trans_fn)
-    dev_loader = DataLoader(dev_ds, batch_size=args.batch_size, shuffle=True, collate_fn=trans_fn)
-
-    model = model.to(device)
-    model = nn.DataParallel(model)
+    train_loader = DataLoader(train_ds, sampler=train_sampler, batch_size=args.batch_size, collate_fn=trans_fn)
+    dev_loader = DataLoader(dev_ds, batch_size=args.batch_size, shuffle=False, collate_fn=trans_fn)
+    model = DistributedDataParallel(model,
+                                    device_ids=[local_rank],
+                                    output_device=local_rank,
+                                    find_unused_parameters=True)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [{
         'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
@@ -143,15 +156,18 @@ if __name__ == "__main__":
     }]
     total_steps = args.epochs * len(train_loader)
     warmup_steps = total_steps * args.warmup_prop
-    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.lr)
+    optimizer = optim.AdamW(optimizer_grouped_parameters, lr=args.lr)
     scheduler = get_linear_schedule_with_warmup(optimizer,
                                                 num_warmup_steps=warmup_steps,
                                                 num_training_steps=total_steps)
     criterion = torch.nn.CrossEntropyLoss(reduction="mean")
     log_dir = os.path.join(args.save_dir, "log")
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    writer = SummaryWriter(log_dir)
+    if local_rank == 0:
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        writer = SummaryWriter(log_dir)
+    else:
+        writer = None
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
