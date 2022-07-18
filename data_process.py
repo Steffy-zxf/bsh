@@ -2,11 +2,14 @@ import json
 import os
 import random
 import re
+from collections import Counter
 from collections import defaultdict
 
 import jieba
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from imblearn.over_sampling import RandomOverSampler
 
 
 def read_stopword(path):
@@ -194,19 +197,77 @@ def split_to_train_and_test(all_data, save_dir):
     num_train_data = int(len(all_data) * 0.8)
     train_data = all_data[:num_train_data]
     test_data = all_data[num_train_data:]
-    train_file = os.path.join(save_dir, "train.csv")
-    write_data(train_data, train_file)
+    train_file = os.path.join(save_dir, "all_train.csv")
+    write_data(all_data, train_file)
     test_file = os.path.join(save_dir, "test.csv")
     write_data(test_data, test_file)
 
 
+def oversample(file_path):
+    data = pd.read_csv(file_path)
+    labels = list(data["label"])
+    doc_ids = list(range(data.shape[0]))
+    doc_ids = np.array(doc_ids).reshape(-1, 1)
+    ros = RandomOverSampler(random_state=100)
+    x_resampled, y_resampled = ros.fit_resample(doc_ids, labels)
+
+    aug_data = pd.DataFrame(columns=['text_a', 'text_b', 'part', "label"])
+    idx = 0
+    for did, label in zip(x_resampled, y_resampled):
+        aug_data.loc[idx] = data.loc[did].values.tolist()[0]
+        idx += 1
+    path = os.path.join(data_dir, "aug_balanced_data.csv")
+    aug_data.to_csv(path, index=False, encoding="utf8")
+
+
+def read_prediction_data(file_path):
+    data = data = pd.read_csv(file_path)
+    pattern = re.compile(r'(?:e|E)\d+')
+    cnt = 0
+    ecodes = []
+    for idx, row in data.iterrows():
+        part = row['QM Part Structure Text']
+        if not isinstance(part, str):
+            continue
+        part = part.strip().lower()
+
+        text_a = row['Defect Found']
+        text_b = row['Work Executed']
+        if not (isinstance(text_a, str)):
+            text_a = ""
+        if not (isinstance(text_b, str)):
+            text_b = ""
+        cleaned_a = re.sub(r"sj[0-9A-Za-z]*[-/]*\d*|SJ[0-9A-Za-z]*[-/]*\d*|//\d*-|\d*-\d*-", "", text_a)
+        cleaned_b = re.sub(r"</br>|br|\sbr\s|\s</br>\s", "。", text_b)
+        e_code = pattern.findall(cleaned_b)
+
+        if not e_code:
+            e_code = pattern.findall(cleaned_a)
+
+        if not e_code:
+            ecodes.append("")
+            cnt += 1
+        else:
+            ecodes.append(e_code[0])
+            l = list(set([i.lower() for i in e_code]))
+            if len(l) != 1:
+                print(idx, e_code)
+    data['FSB-Text'] = ecodes
+    print(cnt, data.shape)
+    data.to_csv("./data/prediction_0717_2.csv", index=False, encoding="utf8")
+
+
 if __name__ == "__main__":
     data_dir = "./data"
-    file_path = os.path.join(data_dir, "DC数据-0711.xlsx")
+    file_path = os.path.join(data_dir, "prediction_0717.csv")
+    read_prediction_data(file_path)
 
-    cleaned_text_a, cleaned_text_b, labels, parts, all_data, tag_set = check_and_clean_data(file_path)
-    write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
-    split_to_train_and_test(all_data, data_dir)
+    # cleaned_text_a, cleaned_text_b, labels, parts, all_data, tag_set = check_and_clean_data(file_path)
+    # file_path = os.path.join(data_dir, "aug_train.csv")
+    # oversample(file_path)
+
+    # write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
+    # split_to_train_and_test(all_data, data_dir)
 
     # cleaned_text_a.extend(cleaned_text_b)
     # stopwords_file = os.path.join(data_dir, "stopwords.txt")

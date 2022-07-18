@@ -34,3 +34,47 @@ class BiLSTM(nn.Module):
         logits = self.classifier(dense)
         probs = torch.softmax(logits, dim=1)
         return probs
+
+
+class Similarity(nn.Module):
+
+    def __init__(self, temp=0.05):
+        super().__init__()
+        self.temp = temp
+        self.cos = nn.CosineSimilarity(dim=-1)
+
+    def forward(self, x, y):
+        return self.cos(x, y) / self.temp
+
+
+class Model(nn.Module):
+
+    def __init__(self, pretrained_model, num_labels, pooling='cls'):
+        super(Model, self).__init__()
+        self.ptm = pretrained_model
+        self.pooling = pooling
+        self.classifier = nn.Linear(self.ptm.config.hidden_size, num_labels)
+
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        out = self.ptm(input_ids, attention_mask, token_type_ids, output_hidden_states=True)
+
+        if self.pooling == 'cls':
+            pooled_output = out.last_hidden_state[:, 0]  # [batch, 768]
+
+        if self.pooling == 'pooler':
+            pooled_output = out.pooler_output  # [batch, 768]
+
+        if self.pooling == 'last-avg':
+            last = out.last_hidden_state.transpose(1, 2)  # [batch, 768, seqlen]
+            pooled_output = torch.avg_pool1d(last, kernel_size=last.shape[-1]).squeeze(-1)  # [batch, 768]
+
+        if self.pooling == 'first-last-avg':
+            first = out.hidden_states[1].transpose(1, 2)  # [batch, 768, seqlen]
+            last = out.hidden_states[-1].transpose(1, 2)  # [batch, 768, seqlen]
+            first_avg = torch.avg_pool1d(first, kernel_size=last.shape[-1]).squeeze(-1)  # [batch, 768]
+            last_avg = torch.avg_pool1d(last, kernel_size=last.shape[-1]).squeeze(-1)  # [batch, 768]
+            avg = torch.cat((first_avg.unsqueeze(1), last_avg.unsqueeze(1)), dim=1)  # [batch, 2, 768]
+            pooled_output = torch.avg_pool1d(avg.transpose(1, 2), kernel_size=2).squeeze(-1)  # [batch, 768]
+
+        logits = self.classifier(pooled_output)
+        return logits

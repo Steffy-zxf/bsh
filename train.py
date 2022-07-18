@@ -16,11 +16,14 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
+from torchsampler import ImbalancedDatasetSampler
 from transformers import BertForSequenceClassification
+from transformers import BertModel
 from transformers import BertTokenizer
 from transformers import get_linear_schedule_with_warmup
 
 from data import MyDataSet
+from model import Model
 from utils import collate_batch
 
 # yapf: disable
@@ -32,6 +35,7 @@ parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="S
 parser.add_argument("--local_rank", type=int, default=0)
 parser.add_argument("--lr", type=float, default=5e-6, help="Learning rate used to train.")
 parser.add_argument("--data_dir", type=str, default='data/', help="Directory to data.")
+parser.add_argument("--pooling", type=str, default='last-avg', help="Pooling strategy.options:cls, pooler, last-avg, first-last-avg")
 parser.add_argument("--save_dir", type=str, default='checkpoints/', help="Directory to save model checkpoint and logger.")
 parser.add_argument("--batch_size", type=int, default=32, help="Total examples' number of a batch for training.")
 parser.add_argument("--init_from_ckpt", type=str, default=None, help="The path of checkpoint to be loaded.")
@@ -40,7 +44,7 @@ args = parser.parse_args()
 # yapf: enable
 
 
-def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, local_rank, writer=None):
+def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv_label, writer=None):
     model.train()
     all_preds, all_labels = [], []
     total_acc, total_count = 0, 0
@@ -55,7 +59,7 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         attention_mask = attention_mask.to(device)
         labels = labels.to(device)
         optimizer.zero_grad()
-        logits = model(input_ids, attention_mask, token_type_ids)["logits"]
+        logits = model(input_ids, attention_mask, token_type_ids)  #["logits"]
         preds = torch.argmax(logits, dim=-1)
         preds = preds.cpu().numpy().tolist()
         preds = [inv_label[index] for index in preds]
@@ -71,14 +75,11 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
 
         total_acc += (logits.argmax(1) == labels).sum().item()
         total_count += labels.size(0)
-        if idx % log_interval == 0 and idx > 0 and local_rank == 0:
+        if idx % log_interval == 0 and idx > 0:  # and local_rank == 0:
             print("| epoch {:3d} | {:5d}/{:5d} batches "
-                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / (idx + 1)))
-            writer.add_scalar("loss", total_loss / (idx + 1), global_step)
-            writer.add_scalar("train_acc", total_acc / (idx + 1), global_step)
-            t = classification_report(all_labels, all_preds)
-            print(t)
-
+                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / total_count))
+            writer.add_scalar("loss", total_loss / log_interval, global_step)
+            writer.add_scalar("train_acc", total_acc / total_count, global_step)
             total_acc, total_count = 0, 0
             all_preds, all_labels = [], []
 
@@ -94,7 +95,7 @@ def evaluate(device, dataloader, model, inv_label):
             token_type_ids = token_type_ids.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
-            logits = model(input_ids, attention_mask, token_type_ids)["logits"]
+            logits = model(input_ids, attention_mask, token_type_ids)  # ["logits"]
             preds = torch.argmax(logits, dim=-1)
             preds = preds.cpu().numpy().tolist()
             preds = [inv_label[index] for index in preds]
@@ -116,9 +117,9 @@ def set_seed(seed=1000):
 
 
 if __name__ == "__main__":
-    local_rank = args.local_rank
-    device = torch.device(args.device, local_rank)
-    dist.init_process_group(backend="nccl")
+    # local_rank = args.local_rank
+    device = torch.device(args.device)  #, local_rank)
+    # dist.init_process_group(backend="nccl")
 
     set_seed(args.seed)
 
@@ -132,18 +133,24 @@ if __name__ == "__main__":
     dev_file = os.path.join(args.data_dir, "test.csv")
     dev_ds = MyDataSet(dev_file)
 
-    model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    ptm = BertModel.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    model = Model(ptm, num_labels=len(label_dict), pooling='last-avg')
     model = model.to(device)
     tokenizer = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
 
     trans_fn = partial(collate_batch, tokenizer=tokenizer, label_dict=label_dict)
-    train_sampler = DistributedSampler(train_ds, shuffle=True)
-    train_loader = DataLoader(train_ds, sampler=train_sampler, batch_size=args.batch_size, collate_fn=trans_fn)
-    dev_loader = DataLoader(dev_ds, batch_size=args.batch_size, shuffle=False, collate_fn=trans_fn)
-    model = DistributedDataParallel(model,
-                                    device_ids=[local_rank],
-                                    output_device=local_rank,
-                                    find_unused_parameters=True)
+    train_sampler = ImbalancedDatasetSampler(train_ds, labels=list(label_dict.keys()))
+    train_loader = DataLoader(train_ds,
+                              sampler=train_sampler,
+                              collate_fn=trans_fn,
+                              shuffle=True,
+                              batch_size=args.batch_size)
+    dev_sampler = ImbalancedDatasetSampler(dev_ds, labels=list(label_dict.keys()))
+    dev_loader = DataLoader(dev_ds, sampler=dev_sampler, collate_fn=trans_fn, shuffle=False, batch_size=args.batch_size)
+    model = nn.DataParallel(model)
+    # device_ids=[local_rank],
+    # output_device=local_rank,
+    # find_unused_parameters=True)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [{
         'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
@@ -162,23 +169,23 @@ if __name__ == "__main__":
                                                 num_training_steps=total_steps)
     criterion = torch.nn.CrossEntropyLoss(reduction="mean")
     log_dir = os.path.join(args.save_dir, "log")
-    if local_rank == 0:
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        writer = SummaryWriter(log_dir)
-    else:
-        writer = None
+    # if local_rank == 0:
+    #     if not os.path.exists(log_dir):
+    #         os.makedirs(log_dir)
+    #     writer = SummaryWriter(log_dir)
+    # else:
+    #     writer = None
+    writer = SummaryWriter(log_dir)
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
         train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label, writer)
-        if local_rank == 0:
-            accu_val = evaluate(device, dev_loader, model, inv_label)
-            print("-" * 59)
-            print("| end of epoch {:3d} | time: {:5.2f}s | "
-                  "valid accuracy {:8.3f} ".format(i,
-                                                   time.time() - epoch_start_time, accu_val))
-            writer.add_scalar("test_acc", accu_val, (i + 1) * len(train_loader))
-            print("-" * 59)
-            path = os.path.join(args.save_dir, "epoch_" + str(i) + ".pth")
-            torch.save(model.module.state_dict(), path)
+        accu_val = evaluate(device, dev_loader, model, inv_label)
+        print("-" * 59)
+        print("| end of epoch {:3d} | time: {:5.2f}s | "
+              "valid accuracy {:8.3f} ".format(i,
+                                               time.time() - epoch_start_time, accu_val))
+        writer.add_scalar("test_acc", accu_val, (i + 1) * len(train_loader))
+        print("-" * 59)
+        path = os.path.join(args.save_dir, "epoch_" + str(i) + ".pth")
+        torch.save(model.module.state_dict(), path)
