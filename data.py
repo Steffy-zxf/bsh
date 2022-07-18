@@ -13,7 +13,8 @@ class MyDataSet(Dataset):
 
     def __getitem__(self, idx):
         if self.is_test:
-            text_a, text_b, part = self.data.loc[idx]["Defect Found"], self.data.loc[idx]["Work Executed"], self.data.loc[idx]['QM Part Structure Text']
+            text_a, text_b, part = self.data.loc[idx]["Defect Found"], self.data.loc[idx][
+                "Work Executed"], self.data.loc[idx]['QM Part Structure Text']
             part = part.strip().lower()
             if not (isinstance(text_a, str)):
                 text_a = ""

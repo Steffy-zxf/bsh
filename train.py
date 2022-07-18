@@ -16,13 +16,14 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
-from transformers import BertForSequenceClassification, BertModel
+from transformers import BertForSequenceClassification
+from transformers import BertModel
 from transformers import BertTokenizer
 from transformers import get_linear_schedule_with_warmup
 
 from data import MyDataSet
-from utils import collate_batch
 from model import Model
+from utils import collate_batch
 
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
@@ -57,7 +58,7 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         attention_mask = attention_mask.to(device)
         labels = labels.to(device)
         optimizer.zero_grad()
-        logits = model(input_ids, attention_mask, token_type_ids)#["logits"]
+        logits = model(input_ids, attention_mask, token_type_ids)  #["logits"]
         preds = torch.argmax(logits, dim=-1)
         preds = preds.cpu().numpy().tolist()
         preds = [inv_label[index] for index in preds]
@@ -93,7 +94,7 @@ def evaluate(device, dataloader, model, inv_label):
             token_type_ids = token_type_ids.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
-            logits = model(input_ids, attention_mask, token_type_ids)# ["logits"]
+            logits = model(input_ids, attention_mask, token_type_ids)  # ["logits"]
             preds = torch.argmax(logits, dim=-1)
             preds = preds.cpu().numpy().tolist()
             preds = [inv_label[index] for index in preds]
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     dev_ds = MyDataSet(dev_file)
 
     ptm = BertModel.from_pretrained("nghuyong/ernie-gram-zh", num_labels=len(label_dict))
-    model = Model(ptm,  num_labels=len(label_dict), pooling='last-avg')
+    model = Model(ptm, num_labels=len(label_dict), pooling='last-avg')
     model = model.to(device)
     tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-gram-zh")
 

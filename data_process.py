@@ -2,12 +2,13 @@ import json
 import os
 import random
 import re
-from collections import defaultdict, Counter
+from collections import Counter
+from collections import defaultdict
 
 import jieba
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 from imblearn.over_sampling import RandomOverSampler
 
 
@@ -208,13 +209,12 @@ if __name__ == "__main__":
 
     cleaned_text_a, cleaned_text_b, labels, parts, all_data, tag_set = check_and_clean_data(file_path)
 
-    label_map = {l:idx for idx, l in enumerate(tag_set)}
+    label_map = {l: idx for idx, l in enumerate(tag_set)}
 
     data = pd.read_csv("./data/aug_train.csv")
     labels = list(data["label"])
     doc_ids = list(range(data.shape[0]))
     doc_ids = np.array(doc_ids).reshape(-1, 1)
-
 
     ros = RandomOverSampler(random_state=100)
     x_resampled, y_resampled = ros.fit_resample(doc_ids, labels)
@@ -226,8 +226,6 @@ if __name__ == "__main__":
         idx += 1
     path = os.path.join(data_dir, "aug_balanced_data.csv")
     aug_data.to_csv(path, index=False, encoding="utf8")
-
-
 
     # write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
     # split_to_train_and_test(all_data, data_dir)
