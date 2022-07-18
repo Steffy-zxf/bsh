@@ -16,12 +16,13 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
-from transformers import BertForSequenceClassification
+from transformers import BertForSequenceClassification, BertModel
 from transformers import BertTokenizer
 from transformers import get_linear_schedule_with_warmup
 
 from data import MyDataSet
 from utils import collate_batch
+from model import Model
 
 # yapf: disable
 parser = argparse.ArgumentParser(__doc__)
@@ -32,6 +33,7 @@ parser.add_argument('--device', choices=['cpu', 'cuda'], default="cuda", help="S
 parser.add_argument("--local_rank", type=int, default=0)
 parser.add_argument("--lr", type=float, default=5e-6, help="Learning rate used to train.")
 parser.add_argument("--data_dir", type=str, default='data/', help="Directory to data.")
+parser.add_argument("--pooling", type=str, default='last-avg', help="Pooling strategy.options:cls, pooler, last-avg, first-last-avg")
 parser.add_argument("--save_dir", type=str, default='checkpoints/', help="Directory to save model checkpoint and logger.")
 parser.add_argument("--batch_size", type=int, default=32, help="Total examples' number of a batch for training.")
 parser.add_argument("--init_from_ckpt", type=str, default=None, help="The path of checkpoint to be loaded.")
@@ -55,7 +57,7 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         attention_mask = attention_mask.to(device)
         labels = labels.to(device)
         optimizer.zero_grad()
-        logits = model(input_ids, attention_mask, token_type_ids)["logits"]
+        logits = model(input_ids, attention_mask, token_type_ids)#["logits"]
         preds = torch.argmax(logits, dim=-1)
         preds = preds.cpu().numpy().tolist()
         preds = [inv_label[index] for index in preds]
@@ -73,12 +75,9 @@ def train(device, dataloader, model, optimizer, scheduler, criterion, epoch, inv
         total_count += labels.size(0)
         if idx % log_interval == 0 and idx > 0 and local_rank == 0:
             print("| epoch {:3d} | {:5d}/{:5d} batches "
-                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / (idx + 1)))
-            writer.add_scalar("loss", total_loss / (idx + 1), global_step)
-            writer.add_scalar("train_acc", total_acc / (idx + 1), global_step)
-            t = classification_report(all_labels, all_preds)
-            print(t)
-
+                  "| accuracy {:8.3f}".format(epoch, idx, len(dataloader), total_acc / total_count))
+            writer.add_scalar("loss", total_loss / log_interval, global_step)
+            writer.add_scalar("train_acc", total_acc / total_count, global_step)
             total_acc, total_count = 0, 0
             all_preds, all_labels = [], []
 
@@ -94,7 +93,7 @@ def evaluate(device, dataloader, model, inv_label):
             token_type_ids = token_type_ids.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
-            logits = model(input_ids, attention_mask, token_type_ids)["logits"]
+            logits = model(input_ids, attention_mask, token_type_ids)# ["logits"]
             preds = torch.argmax(logits, dim=-1)
             preds = preds.cpu().numpy().tolist()
             preds = [inv_label[index] for index in preds]
@@ -132,9 +131,10 @@ if __name__ == "__main__":
     dev_file = os.path.join(args.data_dir, "test.csv")
     dev_ds = MyDataSet(dev_file)
 
-    model = BertForSequenceClassification.from_pretrained("hfl/chinese-roberta-wwm-ext", num_labels=len(label_dict))
+    ptm = BertModel.from_pretrained("nghuyong/ernie-gram-zh", num_labels=len(label_dict))
+    model = Model(ptm,  num_labels=len(label_dict), pooling='last-avg')
     model = model.to(device)
-    tokenizer = BertTokenizer.from_pretrained("hfl/chinese-roberta-wwm-ext")
+    tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-gram-zh")
 
     trans_fn = partial(collate_batch, tokenizer=tokenizer, label_dict=label_dict)
     train_sampler = DistributedSampler(train_ds, shuffle=True)
@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
     for i in range(args.epochs):
         epoch_start_time = time.time()
-        train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label, writer)
+        train(device, train_loader, model, optimizer, scheduler, criterion, i, inv_label, local_rank, writer)
         if local_rank == 0:
             accu_val = evaluate(device, dev_loader, model, inv_label)
             print("-" * 59)

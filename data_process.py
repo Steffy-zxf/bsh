@@ -2,11 +2,13 @@ import json
 import os
 import random
 import re
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import jieba
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
+from imblearn.over_sampling import RandomOverSampler
 
 
 def read_stopword(path):
@@ -165,10 +167,10 @@ def check_and_clean_data(file_path):
 
 
 def write_to_file(save_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set):
-    d = {"text_a": cleaned_text_a, "text_b": cleaned_text_b, "part": parts, "label": labels}
-    df = pd.DataFrame(data=d)
-    path = os.path.join(save_dir, "cleaned_data.csv")
-    df.to_csv(path, index=False, encoding="utf8")
+    # d = {"text_a": cleaned_text_a, "text_b": cleaned_text_b, "part": parts, "label": labels}
+    # df = pd.DataFrame(data=d)
+    # path = os.path.join(save_dir, "cleaned_data.csv")
+    # df.to_csv(path, index=False, encoding="utf8")
 
     tags_file = os.path.join(save_dir, "tags.txt")
     tag_dict = {}
@@ -205,8 +207,30 @@ if __name__ == "__main__":
     file_path = os.path.join(data_dir, "DC数据-0711.xlsx")
 
     cleaned_text_a, cleaned_text_b, labels, parts, all_data, tag_set = check_and_clean_data(file_path)
-    write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
-    split_to_train_and_test(all_data, data_dir)
+
+    label_map = {l:idx for idx, l in enumerate(tag_set)}
+
+    data = pd.read_csv("./data/aug_train.csv")
+    labels = list(data["label"])
+    doc_ids = list(range(data.shape[0]))
+    doc_ids = np.array(doc_ids).reshape(-1, 1)
+
+
+    ros = RandomOverSampler(random_state=100)
+    x_resampled, y_resampled = ros.fit_resample(doc_ids, labels)
+
+    aug_data = pd.DataFrame(columns=['text_a', 'text_b', 'part', "label"])
+    idx = 0
+    for did, label in zip(x_resampled, y_resampled):
+        aug_data.loc[idx] = data.loc[did].values.tolist()[0]
+        idx += 1
+    path = os.path.join(data_dir, "aug_balanced_data.csv")
+    aug_data.to_csv(path, index=False, encoding="utf8")
+
+
+
+    # write_to_file(data_dir, cleaned_text_a, cleaned_text_b, parts, labels, tag_set)
+    # split_to_train_and_test(all_data, data_dir)
 
     # cleaned_text_a.extend(cleaned_text_b)
     # stopwords_file = os.path.join(data_dir, "stopwords.txt")
